@@ -85,7 +85,7 @@ namespace Patty_SoundChanger_MOD
             {
                 localizedText = LocalizationManager.GetTranslation(localizedText);
             }
-            else if (LocalizationManager.IsTranslatableTerm(localizedText))
+            else if (LocalizationManager.IsTranslatableTerm(trackName))
             {
                 localizedText = LocalizationManager.GetTranslation(trackName);
             }

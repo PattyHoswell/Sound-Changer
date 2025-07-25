@@ -18,6 +18,6 @@
         /// <summary>
         /// Version of this plugin
         /// </summary>
-        public const string Version = "1.0.0";
+        public const string Version = "2.0.0";
     }
 }

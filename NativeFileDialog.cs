@@ -6,8 +6,12 @@ namespace Patty_SoundChanger_MOD
     /// <summary>
     /// Taken from <a href="https://learn.microsoft.com/en-us/windows/win32/api/commdlg/ns-commdlg-openfilenamea">OpenFileName commdlg</a>
     /// </summary>
-    internal class NativeFileDialog
+    public class NativeFileDialog
     {
+
+        /// <summary>
+        /// Usage for <see cref="NativeFileDialog.OpenFileName.Flags"/>
+        /// </summary>
         [Flags]
         public enum OFN_Flags
         {
@@ -204,6 +208,9 @@ namespace Patty_SoundChanger_MOD
             OFN_SHOWHELP = 0x00000010,
         }
 
+        /// <summary>
+        /// Usage for <see cref="NativeFileDialog.OpenFileName.FlagsEx"/>
+        /// </summary>
         [Flags]
         public enum OFN_Flags_EX
         {
@@ -376,14 +383,14 @@ namespace Patty_SoundChanger_MOD
 
             /// <summary>
             /// Type: <b>DWORD</b>
-            /// <b/><b/>
+            /// <br/><br/>
             /// A set of bit flags you can use to initialize the dialog box. When the dialog box returns, it sets these flags to indicate the user's input. This member can be a combination of the following flags.
             /// </summary>
             public int Flags;
 
             /// <summary>
             /// Type: <b>WORD</b>
-            /// <b/><b/>
+            /// <br/><br/>
             /// The zero-based offset, in characters, from the beginning of the path to the file name in the string pointed to by <b>lpstrFile</b>. 
             /// For the ANSI version, this is the number of bytes; for the Unicode version, this is the number of characters. 
             /// For example, if <b>lpstrFile</b> points to the following string, "c:\dir1\dir2\file.ext", this member contains the value 13 to indicate the offset of the "file.ext" string. 
@@ -393,7 +400,7 @@ namespace Patty_SoundChanger_MOD
 
             /// <summary>
             /// Type: <b>WORD</b>
-            /// <b/><b/>
+            /// <br/><br/>
             /// The zero-based offset, in characters, from the beginning of the path to the file name extension in the string pointed to by <b>lpstrFile</b>. 
             /// For the ANSI version, this is the number of bytes; for the Unicode version, this is the number of characters. 
             /// Usually the file name extension is the substring which follows the last occurrence of the dot (".") character. 
@@ -407,7 +414,7 @@ namespace Patty_SoundChanger_MOD
 
             /// <summary>
             /// Type: <b>LPCTSTR</b>
-            /// <b/><b/>
+            /// <br/><br/>
             /// The default extension. <a href="https://learn.microsoft.com/en-us/windows/desktop/api/commdlg/nf-commdlg-getopenfilenamea">GetOpenFileName</a> and 
             /// <a href="https://learn.microsoft.com/en-us/windows/desktop/api/commdlg/nf-commdlg-getsavefilenamea">GetSaveFileName</a> 
             /// append this extension to the file name if the user fails to type an extension. 
@@ -418,7 +425,7 @@ namespace Patty_SoundChanger_MOD
 
             /// <summary>
             /// Type: <b>LPARAM</b>
-            /// <b/><b/>
+            /// <br/><br/>
             /// Application-defined data that the system passes to the hook procedure identified by the <b>lpfnHook</b> member. 
             /// When the system sends the <a href="https://learn.microsoft.com/en-us/windows/desktop/dlgbox/wm-initdialog">WM_INITDIALOG</a> message to the hook procedure, 
             /// the message's <b>lParam</b> parameter is a pointer to the <b>OPENFILENAME</b> structure specified when the dialog box was created. 
@@ -428,14 +435,14 @@ namespace Patty_SoundChanger_MOD
 
             /// <summary>
             /// Type: <b>LPOFNHOOKPROC</b>
-            /// <b/><b/>
+            /// <br/><br/>
             /// A pointer to a hook procedure. This member is ignored unless the Flags member includes the <b>OFN_ENABLEHOOK</b> flag.
-            /// <b/><b/>
+            /// <br/><br/>
             /// If the <b>OFN_EXPLORER</b> flag is not set in the <b>Flags</b> member, <b>lpfnHook</b> is a pointer to an 
             /// <a href="https://learn.microsoft.com/en-us/previous-versions/windows/desktop/legacy/ms646932(v=vs.85)">OFNHookProcOldStyle</a> 
             /// hook procedure that receives messages intended for the dialog box. 
             /// The hook procedure returns <b>FALSE</b> to pass a message to the default dialog box procedure or <b>TRUE</b> to discard the message.
-            /// <b/><b/>
+            /// <br/><br/>
             /// If <b>OFN_EXPLORER</b> is set, <b>lpfnHook</b> is a pointer to an 
             /// <a href="https://learn.microsoft.com/en-us/windows/desktop/api/commdlg/nc-commdlg-lpofnhookproc">OFNHookProc</a>hook procedure. 
             /// The hook procedure receives notification messages sent from the dialog box. 
@@ -480,6 +487,16 @@ namespace Patty_SoundChanger_MOD
         [DllImport("comdlg32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern bool GetOpenFileName(ref OpenFileName ofn);
 
+        /// <summary>
+        /// Open a file dialog that prompts the user to select a file to load
+        /// <br/><br/>
+        /// Will freeze the application until the user closed the prompts
+        /// </summary>
+        /// <param name="onComplete"></param>
+        /// <param name="title"></param>
+        /// <param name="filter"></param>
+        /// <param name="initialDir"></param>
+        /// <param name="initialFile"></param>
         public static void OpenSingleFile(Action<string> onComplete,
                                           string title = "Open File",
                                           string filter = "All Files\0*.*\0\0",

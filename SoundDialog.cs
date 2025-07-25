@@ -39,7 +39,7 @@ namespace Patty_SoundChanger_MOD
         internal LayoutElement ContentLayout;
         void Start()
         {
-            name = nameof(SoundDialog);
+            name = "Sound Dialog";
             PauseDialog = Traverse.Create(SettingsScreen).Field<PauseDialog>("pauseDialog").Value;
 
             headerTitle = transform.Find("Header/Title").GetComponent<TextMeshProUGUI>();
@@ -82,6 +82,7 @@ namespace Patty_SoundChanger_MOD
         {
             var settingButton = Traverse.Create(pauseDialog).Field<GameUISelectableButton>("settingsButton").Value;
             soundChangerButton = Instantiate(settingButton, settingButton.transform.parent);
+            soundChangerButton.name = "Sound Changer button";
             soundChangerButton.transform.SetSiblingIndex(1);
             var soundChangerTMP = soundChangerButton.GetComponentInChildren<TMP_Text>(true);
             DestroyImmediate(soundChangerTMP.GetComponent<Localize>());

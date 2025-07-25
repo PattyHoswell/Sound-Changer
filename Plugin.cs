@@ -3,6 +3,7 @@ using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
+using I2.Loc;
 using ShinyShoe;
 using ShinyShoe.Audio;
 using System;
@@ -15,12 +16,20 @@ using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.U2D;
 using static ShinyShoe.Audio.CoreMusicData;
+using static ShinyShoe.Audio.CoreSoundEffectData;
+using static SoundManager;
 
 namespace Patty_SoundChanger_MOD
 {
+    /// <summary>
+    /// The main class of this mod
+    /// </summary>
     [BepInPlugin(PluginInfo.GUID, PluginInfo.Name, PluginInfo.Version)]
-    class Plugin : BaseUnityPlugin
+    public class Plugin : BaseUnityPlugin
     {
+        /// <summary>
+        /// A constant string for the section
+        /// </summary>
         public const string MUSIC_SECTION = "Music", SFX_SECTION = "SFX";
 
         internal static bool Initialized { get; private set; }
@@ -29,16 +38,14 @@ namespace Patty_SoundChanger_MOD
         internal static ManualLogSource LogSource { get; private set; }
         internal static Harmony PluginHarmony { get; private set; }
         internal static new ConfigFile Config { get; private set; }
-        internal static AudioClip TestClip { get; private set; }
-        internal static Dictionary<ConfigEntryBase, CoreMusicData.MusicDefinition> MusicEntries { get; private set; } =
-                    new Dictionary<ConfigEntryBase, CoreMusicData.MusicDefinition>();
-        internal static Dictionary<ConfigEntryBase, CoreSoundEffectData.SoundCueDefinition> SFXEntries { get; private set; } =
-                    new Dictionary<ConfigEntryBase, CoreSoundEffectData.SoundCueDefinition>();
-        internal static Dictionary<CoreMusicData.MusicDefinition, List<AudioClip>> OriginalMusics { get; private set; } =
-                    new Dictionary<CoreMusicData.MusicDefinition, List<AudioClip>>();
-        internal static Dictionary<CoreSoundEffectData.SoundCueDefinition, List<AudioClip>> OriginalSFX { get; private set; } =
-                    new Dictionary<CoreSoundEffectData.SoundCueDefinition, List<AudioClip>>();
-        internal static readonly Signal<string> musicChanged = new Signal<string>();
+        internal static OrderedDictionary<ConfigEntryBase, SoundData<MusicDefinition>> MusicEntries { get; private set; } =
+                    new OrderedDictionary<ConfigEntryBase, SoundData<MusicDefinition>>();
+        internal static OrderedDictionary<ConfigEntryBase, SoundData<SoundCueDefinition>> SFXEntries { get; private set; } =
+                    new OrderedDictionary<ConfigEntryBase, SoundData<SoundCueDefinition>>();
+        internal static OrderedDictionary<MusicDefinition, List<AudioClip>> OriginalMusics { get; private set; } =
+                    new OrderedDictionary<MusicDefinition, List<AudioClip>>();
+        internal static OrderedDictionary<SoundCueDefinition, List<AudioClip>> OriginalSFX { get; private set; } =
+                    new OrderedDictionary<SoundCueDefinition, List<AudioClip>>();
         internal static Traverse configurationManagerTraverse;
         internal static Lazy<GUIStyle> centeredStyle = new Lazy<GUIStyle>(() =>
         {
@@ -68,6 +75,22 @@ namespace Patty_SoundChanger_MOD
         internal static MethodInfo rebuildSettings;
         internal static SpriteAtlas scrollbarAtlas;
         internal static ConfigEntry<bool> enableIngameMenu;
+
+        /// <summary>
+        /// Triggers when the music changed in game
+        /// </summary>
+        public static readonly Signal<string> musicChanged = new Signal<string>();
+
+        /// <summary>
+        /// The manager of this mod for your mod to use
+        /// </summary>
+        public static readonly ISoundChanger soundChangerManager = new SoundChangerManager();
+
+        /// <summary>
+        /// Triggers when this mod is initialized
+        /// </summary>
+        public static readonly Signal onInitialize = new Signal();
+
         void Awake()
         {
             Instance = this;
@@ -151,6 +174,7 @@ namespace Patty_SoundChanger_MOD
                 HideSettingName = true,
                 ReadOnly = true,
             }));
+
             if (string.IsNullOrEmpty(currentSectionEntry.Value) ||
                 (currentSectionEntry.Value != MUSIC_SECTION &&
                 currentSectionEntry.Value != SFX_SECTION))
@@ -158,9 +182,12 @@ namespace Patty_SoundChanger_MOD
                 currentSectionEntry.Value = MUSIC_SECTION;
             }
 
-            var assetBundle = AssetBundle.LoadFromFile(Path.Combine(BasePath, "scrollbar.bundle"));
-            scrollbarAtlas = assetBundle.LoadAsset<SpriteAtlas>("ScrollbarAtlas");
-            assetBundle.Unload(unloadAllLoadedObjects: false);
+            if (enableIngameMenu.Value)
+            {
+                var assetBundle = AssetBundle.LoadFromFile(Path.Combine(BasePath, "scrollbar.bundle"));
+                scrollbarAtlas = assetBundle.LoadAsset<SpriteAtlas>("ScrollbarAtlas");
+                assetBundle.Unload(unloadAllLoadedObjects: false);
+            }
 
             Plugin.musicChanged.AddListener(OnMusicChanged);
         }
@@ -192,33 +219,34 @@ namespace Patty_SoundChanger_MOD
                 return;
             }
             Initialized = true;
-            var settingManager = (SettingsScreen)allGameManager.GetScreenManager().GetScreen(ScreenName.Settings);
             if (enableIngameMenu.Value)
             {
+                var settingManager = (SettingsScreen)allGameManager.GetScreenManager().GetScreen(ScreenName.Settings);
                 SoundDialog.CreateDialog(settingManager);
             }
             var soundManager = allGameManager.GetSoundManager();
             var soundManagerTraverse = Traverse.Create(soundManager);
-            var coreAudio = soundManager.GetComponent<CoreAudioSystem>();
+            var coreAudio = soundManagerTraverse.Field<CoreAudioSystem>("audioSystem").Value;
             var audioSystemData = Traverse.Create(coreAudio).Field("AudioSystemData").GetValue<CoreAudioSystemData>();
             foreach (CoreMusicData.MusicDefinition definition in audioSystemData.MusicDefData.Tracks.OrderBy(track => track.Name))
             {
-                CreateMusicEntry(definition);
+                CreateEntry(definition);
             }
             foreach (CoreSoundEffectData.SoundCueDefinition sfxDefinition in audioSystemData.GlobalSoundEffectData.Sounds.OrderBy(track => track.Name))
             {
-                CreateSFXEntry(sfxDefinition);
+                CreateEntry(sfxDefinition);
             }
             SetBrowsableSection(currentSectionEntry.Value);
+            onInitialize.Dispatch();
         }
 
-        internal static void CreateMusicEntry(CoreMusicData.MusicDefinition definition)
+        internal static void CreateEntry(CoreMusicData.MusicDefinition definition)
         {
             if (definition == null)
             {
                 return;
             }
-            if (MusicEntries.ContainsValue(definition))
+            if (MusicEntries.Values.Any(data => data?.definition == definition))
             {
                 return;
             }
@@ -236,24 +264,24 @@ namespace Patty_SoundChanger_MOD
                 HideSettingName = true,
                 CustomDrawer = MusicDrawer,
             }));
-            if (entry == null)
-            {
-                return;
-            }
             entry.SettingChanged += Entry_SettingChanged;
-            MusicEntries[entry] = definition;
-            if (File.Exists(entry.Value))
+            MusicEntries[entry] = SoundData<MusicDefinition>.Create(entry, definition);
+            if (MusicEntries[entry].IsFileExist())
             {
-                Instance.StartCoroutine(LoadAudioClip(entry.Value, (audioClip) =>
+                Instance.StartCoroutine(LoadAudioClip(MusicEntries[entry].GetFilePath(), (audioClip) =>
                 {
                     OnAudioClipLoaded(entry, audioClip);
                 }));
             }
         }
 
-        internal static void CreateSFXEntry(CoreSoundEffectData.SoundCueDefinition definition)
+        internal static void CreateEntry(CoreSoundEffectData.SoundCueDefinition definition)
         {
-            if (SFXEntries.ContainsValue(definition))
+            if (definition == null)
+            {
+                return;
+            }
+            if (SFXEntries.Values.Any(data => data?.definition == definition))
             {
                 return;
             }
@@ -272,17 +300,17 @@ namespace Patty_SoundChanger_MOD
                 CustomDrawer = MusicDrawer,
             }));
             entry.SettingChanged += Entry_SettingChanged;
-            SFXEntries[entry] = definition;
-            if (File.Exists(entry.Value))
+            SFXEntries[entry] = SoundData<SoundCueDefinition>.Create(entry, definition);
+            if (SFXEntries[entry].IsFileExist())
             {
-                Instance.StartCoroutine(LoadAudioClip(entry.Value, (audioClip) =>
+                Instance.StartCoroutine(LoadAudioClip(SFXEntries[entry].GetFilePath(), (audioClip) =>
                 {
                     OnAudioClipLoaded(entry, audioClip);
                 }));
             }
         }
 
-        private static void Entry_SettingChanged(object sender, EventArgs e)
+        internal static void Entry_SettingChanged(object sender, EventArgs e)
         {
             ResetEntryBase(((SettingChangedEventArgs)e).ChangedSetting);
         }
@@ -303,12 +331,12 @@ namespace Patty_SoundChanger_MOD
                     return;
                 }
                 var soundManager = allGameManager.GetSoundManager();
-                if (MusicEntries.TryGetValue(entryBase, out CoreMusicData.MusicDefinition musicDefinition))
+                if (MusicEntries.TryGetValue(entryBase, out SoundData<MusicDefinition> musicData))
                 {
                     string musicName = soundManager.GetCurrentMusicTrackName();
                     foreach (var originalMusic in OriginalMusics)
                     {
-                        if (originalMusic.Key == musicDefinition)
+                        if (originalMusic.Key == musicData.definition)
                         {
                             var clips = originalMusic.Key.Clips;
                             for (var i = 0; i < clips.Length; i++)
@@ -318,21 +346,21 @@ namespace Patty_SoundChanger_MOD
                             break;
                         }
                     }
-                    if (musicDefinition.Name == musicName)
+                    if (musicData.entryName == musicName)
                     {
                         ReplayMusic(entryBase, GetPlayingMusicName(), onPlay);
                     }
                 }
-                else if (SFXEntries.TryGetValue(entryBase, out CoreSoundEffectData.SoundCueDefinition soundCueDefinition))
+                else if (SFXEntries.TryGetValue(entryBase, out SoundData<SoundCueDefinition> sfxData))
                 {
-                    foreach (var originalMusic in OriginalSFX)
+                    foreach (var originalSFX in OriginalSFX)
                     {
-                        if (originalMusic.Key == soundCueDefinition)
+                        if (originalSFX.Key == sfxData.definition)
                         {
-                            var clips = originalMusic.Key.Clips;
+                            var clips = originalSFX.Key.Clips;
                             for (var i = 0; i < clips.Length; i++)
                             {
-                                clips[i] = originalMusic.Value[i];
+                                clips[i] = originalSFX.Value[i];
                             }
                             break;
                         }
@@ -354,8 +382,8 @@ namespace Patty_SoundChanger_MOD
             }
             var soundManager = allGameManager.GetSoundManager();
             var soundManagerTraverse = Traverse.Create(soundManager);
-            var battleMusicTracks = soundManagerTraverse.Field<List<SoundManager.BattleMusicTrack>>("battleMusicTracks").Value;
-            var bossBattleMusicTracks = soundManagerTraverse.Field<List<SoundManager.BattleMusicTrack>>("bossBattleMusicTracks").Value;
+            var battleMusicTracks = soundManagerTraverse.Field<List<BattleMusicTrack>>("battleMusicTracks").Value;
+            var bossBattleMusicTracks = soundManagerTraverse.Field<List<BattleMusicTrack>>("bossBattleMusicTracks").Value;
             battleMusicTracks.AddRange(bossBattleMusicTracks);
 
             var displayName = "";
@@ -363,13 +391,21 @@ namespace Patty_SoundChanger_MOD
             var battleTrack = battleMusicTracks.Find(track => track.trackNameData == musicName);
             if (!string.IsNullOrEmpty(battleTrack.publicTrackNameKey))
             {
-                displayName = battleTrack.publicTrackNameKey.Localize();
+                displayName = battleTrack.publicTrackNameKey;
+                if (LocalizationManager.IsTranslatableTerm(displayName))
+                {
+                    displayName = displayName.Localize();
+                }
             }
             return displayName;
         }
 
         internal static string GetModifiedAudioName(string trackName, CoreAudioSystem coreAudioSystem)
         {
+            if (string.IsNullOrWhiteSpace(trackName))
+            {
+                return "";
+            }
             var getCurrentTrack = Traverse.Create(coreAudioSystem).Method("GetCurrentTrack");
             if (!getCurrentTrack.MethodExists())
             {
@@ -388,7 +424,16 @@ namespace Patty_SoundChanger_MOD
             }
             if (musicDefinition.Name != trackName)
             {
-                return "";
+                if (!trackName.StartsWith("KEY>>") || !trackName.EndsWith("<<"))
+                {
+                    return "";
+                }
+                // Check if the trackName is being wrapped "KEY>>{trackName}<<"
+                trackName = trackName.Substring("KEY>>".Length, trackName.Length - ("KEY>>".Length + "<<".Length));
+                if (musicDefinition.Name != trackName)
+                {
+                    return "";
+                }
             }
             var musicClipDefinition = musicDefinition.Clips.FirstOrDefault(source =>
                                                                            source != null &&
@@ -396,17 +441,22 @@ namespace Patty_SoundChanger_MOD
                                                                            source.Clip.name.Contains(PluginInfo.GUID));
             if (musicClipDefinition != null)
             {
-                /*
-                 * The AudioClip name format is GUID_FileName
-                 * We are removing the GUID_
-                 */
-                var removeLength = PluginInfo.GUID.Length + 1;
-                return musicClipDefinition.Clip.name.Substring(removeLength, musicClipDefinition.Clip.name.Length - removeLength);
+                return RemoveGUIDFromName(musicClipDefinition.Clip);
             }
             return "";
         }
 
-        static void ToggleSectionDrawer(ConfigEntryBase entry)
+        internal static string RemoveGUIDFromName(AudioClip audioClip)
+        {
+            /*
+             * The AudioClip name format is GUID_FileName
+             * We are removing the GUID_
+             */
+            var removeLength = PluginInfo.GUID.Length + 1;
+            return audioClip.name.Substring(removeLength, audioClip.name.Length - removeLength);
+        }
+
+        internal static void ToggleSectionDrawer(ConfigEntryBase entry)
         {
             var pressedMusic = GUILayout.Button($"Toggle {MUSIC_SECTION}", GUILayout.ExpandWidth(true));
             var pressedSFX = GUILayout.Button($"Toggle {SFX_SECTION}", GUILayout.ExpandWidth(true));
@@ -437,7 +487,7 @@ namespace Patty_SoundChanger_MOD
             rebuildSettings.Invoke(configurationManagerTraverse.GetValue(), null);
         }
 
-        static void SetEntriesBrowsable(IEnumerable<object> entries, bool browsable)
+        internal static void SetEntriesBrowsable(IEnumerable<object> entries, bool browsable)
         {
             foreach (var entry in entries)
             {
@@ -447,7 +497,7 @@ namespace Patty_SoundChanger_MOD
             }
         }
 
-        static void CurrentlyPlayingDrawer(ConfigEntryBase entry)
+        internal static void CurrentlyPlayingDrawer(ConfigEntryBase entry)
         {
             var allGameManager = AllGameManagers.Instance;
             if (allGameManager == null)
@@ -458,7 +508,7 @@ namespace Patty_SoundChanger_MOD
             {
                 return;
             }
-            var soundManager = allGameManager.GetSoundManager();
+            SoundManager soundManager = allGameManager.GetSoundManager();
             string musicName = soundManager.GetCurrentMusicTrackName();
             if (!string.IsNullOrEmpty(soundManager.currentTrackName))
             {
@@ -480,7 +530,7 @@ namespace Patty_SoundChanger_MOD
             return isCurrentMusic;
         }
 
-        static void MusicDrawer(ConfigEntryBase entry)
+        internal static void MusicDrawer(ConfigEntryBase entry)
         {
             var isCurrentMusic = IsCurrentMusic(entry);
             var startTag = "";
@@ -534,10 +584,10 @@ namespace Patty_SoundChanger_MOD
                                       Action<string> onPlay = null)
         {
             var filter = "Supported Files (*.wav; *.ogg; *.mp3)\0*.wav;*.ogg;*.mp3\0" +
-                                           "WAV Files (*.wav)\0*.wav\0" +
-                                           "OGG Files (*.ogg)\0*.ogg\0" +
-                                           "MP3 Files (*.mp3)\0*.mp3\0" +
-                                           "All Files\0*.*\0\0";
+                         "WAV Files (*.wav)\0*.wav\0" +
+                         "OGG Files (*.ogg)\0*.ogg\0" +
+                         "MP3 Files (*.mp3)\0*.mp3\0" +
+                         "All Files\0*.*\0\0";
             var initialDirectory = BasePath;
             if (existFile)
             {
@@ -562,7 +612,7 @@ namespace Patty_SoundChanger_MOD
         internal static AudioType GetAudioType(string filePath)
         {
             AudioType result;
-            switch (Path.GetExtension(filePath).ToUpperInvariant())
+            switch (Path.GetExtension(filePath)?.ToUpperInvariant())
             {
                 case ".MP3":
                     result = AudioType.MPEG;
@@ -591,11 +641,14 @@ namespace Patty_SoundChanger_MOD
                 {
                     return;
                 }
-                if (MusicEntries.TryGetValue(entry, out var musicDefinition))
+                if (MusicEntries.TryGetValue(entry, out SoundData<MusicDefinition> musicData))
                 {
-                    foreach (var clipDefinition in musicDefinition.Clips)
+                    musicData.AudioData = audioClip;
+                    if (musicData.definition?.Clips?.IsNullOrEmpty() == true)
                     {
-                        clipDefinition.Clip = audioClip;
+                        LogSource.LogError($"Definition is null, you're likely calling load before assigning a definition after creating an empty SoundData. " +
+                                           $"Try to use {nameof(SoundData<MusicDefinition>.AssignDefinitionToData)} before loading a file");
+                        return;
                     }
                     if (!replayMusic)
                     {
@@ -603,17 +656,21 @@ namespace Patty_SoundChanger_MOD
                     }
                     ReplayMusic(entry, onPlay: onPlay);
                 }
-                else if (SFXEntries.TryGetValue(entry, out var sfxDefinition))
+                else if (SFXEntries.TryGetValue(entry, out SoundData<SoundCueDefinition> sfxData))
                 {
-                    for (var i = 0; i < sfxDefinition.Clips.Length; i++)
+                    sfxData.AudioData = audioClip;
+                    if (sfxData.definition?.Clips?.IsNullOrEmpty() == true)
                     {
-                        sfxDefinition.Clips[i] = audioClip;
+                        LogSource.LogError($"Definition is null, you're likely calling load before assigning a definition after creating an empty SoundData. " +
+                                           $"Try to use {nameof(SoundData<SoundCueDefinition>.AssignDefinitionToData)} before loading a file");
+                        return;
                     }
                 }
             }
             catch (Exception ex)
             {
                 LogSource.LogError((ex.InnerException ?? ex).Message);
+                LogSource.LogError($"You're likely loading too early before the Definition has been loaded, connect a method to {nameof(Plugin)}.{nameof(onInitialize)} instead");
             }
         }
 
@@ -633,11 +690,15 @@ namespace Patty_SoundChanger_MOD
             var soundManager = allGameManager.GetSoundManager();
             if (soundManager.GetCurrentMusicTrackName() == entry.Definition.Key)
             {
-                PlayMusic(entry, displayedName, onPlay);
+                PlayMusic(entry, onPlay: onPlay);
             }
         }
 
-        internal static void PlayMusic(ConfigEntryBase entry, string displayedName = "", Action<string> onPlay = null)
+        internal static void PlayMusic(ConfigEntryBase entry,
+                                       bool isBattleMusic = false,
+                                       float crossfadeTimeSeconds = 0.25f,
+                                       string displayedName = "",
+                                       Action<string> onPlay = null)
         {
             var allGameManager = AllGameManagers.Instance;
             if (allGameManager == null)
@@ -656,7 +717,14 @@ namespace Patty_SoundChanger_MOD
                 {
                     yield return null;
                 }
-                soundManager.PlayMusic(entry.Definition.Key);
+                if (isBattleMusic)
+                {
+                    soundManager.PlayBattleMusic(crossfadeTimeSeconds, entry.Definition.Key);
+                }
+                else
+                {
+                    soundManager.PlayMusic(entry.Definition.Key, crossfadeTimeSeconds);
+                }
                 if (!string.IsNullOrEmpty(displayedName))
                 {
                     var currentTrackName = Traverse.Create(soundManager).Property("currentTrackName");
@@ -667,7 +735,7 @@ namespace Patty_SoundChanger_MOD
             Instance.StartCoroutine(WaitUntilMusicStops());
         }
 
-        internal static void PlaySFX(ConfigEntryBase entry, Action<string> onPlay = null)
+        internal static void PlaySFX(ConfigEntryBase entry, bool loop = false, Action<string> onPlay = null)
         {
             var allGameManager = AllGameManagers.Instance;
             if (allGameManager == null)
@@ -679,10 +747,15 @@ namespace Patty_SoundChanger_MOD
                 return;
             }
             var soundManager = allGameManager.GetSoundManager();
+            var sfxEntry = SFXEntries[entry];
+            var looping = sfxEntry.definition.Loop;
+            sfxEntry.definition.Loop = loop;
             soundManager.PlaySfx(entry.Definition.Key);
+            sfxEntry.definition.Loop = looping;
+            onPlay?.Invoke(entry.Definition.Key);
         }
 
-        static IEnumerator LoadAudioClip(string filePath, Action<AudioClip> onComplete = null)
+        internal static IEnumerator LoadAudioClip(string filePath, Action<AudioClip> onComplete = null)
         {
             using (UnityWebRequest webRequest = UnityWebRequestMultimedia.GetAudioClip(filePath, GetAudioType(filePath)))
             {

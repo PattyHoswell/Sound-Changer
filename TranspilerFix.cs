@@ -9,7 +9,7 @@ namespace Patty_SoundChanger_MOD
     {
         // This patch is needed to fix BattleMusicChanged not using currentTrackName... thanks dev...
         [HarmonyTranspiler, HarmonyPatch(typeof(SoundManager), "PlayBattleMusic")]
-        public static IEnumerable<CodeInstruction> OnBattleMusicChanged(IEnumerable<CodeInstruction> instructions)
+        public static IEnumerable<CodeInstruction> PlayBattleMusic(IEnumerable<CodeInstruction> instructions)
         {
             var modifiedInstructions = new List<CodeInstruction>(instructions);
             int insertIdx = modifiedInstructions.FindIndex(codeInstruction =>

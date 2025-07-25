@@ -11,7 +11,10 @@ using UnityEngine.UI;
 
 namespace Patty_SoundChanger_MOD
 {
-    internal class SoundInfo : MonoBehaviour
+    /// <summary>
+    /// The info for a specific entry for the in game menu
+    /// </summary>
+    public class SoundInfo : MonoBehaviour
     {
         internal ConfigEntryBase entry;
         internal TMP_Text titleTMP, replacementTMP;
@@ -55,6 +58,7 @@ namespace Patty_SoundChanger_MOD
             title.enableAutoSizing = true;
 
             var customMusicTitle = Instantiate(title, gridLayout.transform);
+            customMusicTitle.name = "Replacement Label";
             customMusicTitle.rectTransform.anchoredPosition = new Vector2(320, 0);
 
             var resetButton = Instantiate(settingButton, gridLayout.transform);
@@ -77,7 +81,7 @@ namespace Patty_SoundChanger_MOD
             playButton.GetComponent<RectTransform>().sizeDelta = new Vector2(50, 64);
             playButton.GetComponent<RectTransform>().anchoredPosition = new Vector2(-300, 0);
             playButton.GetComponentInChildren<TextMeshProUGUI>().text = " ▶ ";
-            playButton.name = "Load File Button";
+            playButton.name = "Play Button";
 
             this.entry = entry;
             ((ConfigEntry<string>)this.entry).SettingChanged += SoundInfo_SettingChanged;
@@ -142,7 +146,10 @@ namespace Patty_SoundChanger_MOD
             });
         }
 
-        internal void UpdateText()
+        /// <summary>
+        /// Update the text on this info
+        /// </summary>
+        public void UpdateText()
         {
             var isCurrentMusic = Plugin.IsCurrentMusic(entry);
             var startTag = "";

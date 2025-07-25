@@ -38,6 +38,9 @@
     <Reference Include="Assembly-CSharp">
       <HintPath>..\..\MonsterTrain2_Data\Managed\Assembly-CSharp.dll</HintPath>
     </Reference>
+    <Reference Include="ATL, Version=3.25.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>packages\z440.atl.core.3.25.0\lib\net45\ATL.dll</HintPath>
+    </Reference>
     <Reference Include="BepInEx">
       <HintPath>..\..\BepInEx\core\BepInEx.dll</HintPath>
     </Reference>
@@ -103,7 +106,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ConfigurationManagerAttributes.cs" />
+    <Compile Include="ISoundChanger.cs" />
     <Compile Include="MenuPatch.cs" />
+    <Compile Include="OrderedDictionary.cs" />
+    <Compile Include="SoundChangerManager.cs" />
+    <Compile Include="SoundData.cs" />
     <Compile Include="SoundDialog.cs" />
     <Compile Include="NativeFileDialog.cs" />
     <Compile Include="PatchList.cs" />
@@ -113,6 +120,9 @@
     <Compile Include="SoundInfo.cs" />
     <Compile Include="TemporaryFix.cs" />
     <Compile Include="TranspilerFix.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
